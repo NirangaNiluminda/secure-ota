@@ -1,0 +1,33 @@
+{
+  "_comment": "Golden fixtures shared by every package. The device client, the dashboard and the attack harness all assert against these exact values, so an integration mistake surfaces as a data mismatch rather than a mystery. Firmware digests are never written here by hand: they are derived from `payload` with SHA-256, and scripts/build_fixtures.py writes the matching .bin files.",
+  "deviceModel": "RUH-SENSOR-01",
+  "releases": [
+    {
+      "version": 10200,
+      "semver": "1.2.0",
+      "payload": "SECUREOTA-FIRMWARE\nmodel=RUH-SENSOR-01\nversion=1.2.0\nbuild=release\nnote=baseline image the demo device ships with\n",
+      "locator": "firmware/RUH-SENSOR-01-1.2.0.bin",
+      "publishedAt": 1785542400,
+      "revoked": false,
+      "role": "Baseline. The device starts here, and it is the target of the downgrade attack."
+    },
+    {
+      "version": 10300,
+      "semver": "1.3.0",
+      "payload": "SECUREOTA-FIRMWARE\nmodel=RUH-SENSOR-01\nversion=1.3.0\nbuild=release\nnote=withdrawn after CVE-2026-0001 in the TLS stack\n",
+      "locator": "firmware/RUH-SENSOR-01-1.3.0.bin",
+      "publishedAt": 1787788800,
+      "revoked": true,
+      "role": "Published, then revoked. Devices must refuse it even though the bytes are genuine."
+    },
+    {
+      "version": 10400,
+      "semver": "1.4.0",
+      "payload": "SECUREOTA-FIRMWARE\nmodel=RUH-SENSOR-01\nversion=1.4.0\nbuild=release\nnote=current good release\n",
+      "locator": "firmware/RUH-SENSOR-01-1.4.0.bin",
+      "publishedAt": 1789516800,
+      "revoked": false,
+      "role": "The good update. Happy path of the demo."
+    }
+  ]
+}

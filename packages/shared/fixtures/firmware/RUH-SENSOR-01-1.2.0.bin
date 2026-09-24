@@ -1,0 +1,5 @@
+SECUREOTA-FIRMWARE
+model=RUH-SENSOR-01
+version=1.2.0
+build=release
+note=baseline image the demo device ships with

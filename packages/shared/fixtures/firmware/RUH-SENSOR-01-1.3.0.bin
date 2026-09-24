@@ -1,0 +1,5 @@
+SECUREOTA-FIRMWARE
+model=RUH-SENSOR-01
+version=1.3.0
+build=release
+note=withdrawn after CVE-2026-0001 in the TLS stack
