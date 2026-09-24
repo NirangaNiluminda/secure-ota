@@ -9,6 +9,24 @@ match, is older than what it runs, or has been revoked.
 
 ---
 
+## 0. Where the build stands
+
+All four packages are implemented and verified together against a contract
+deployed on a local node.
+
+| Package | State | Evidence |
+|---|---|---|
+| `device-client` | complete | 108 tests, no network required |
+| `contracts` | complete | 34 tests including ABI conformance |
+| `dashboard` | complete | typechecks and builds; layering guard green |
+| `attack-harness` | complete | control + 3 attacks pass end to end |
+
+Remaining work is **Stage 4 and 5 only**: deploy to Sepolia, build the deck from
+`docs/slides/OUTLINE.md`, rehearse against `docs/demo/RUNBOOK.md`, record the
+backup capture, and submit.
+
+---
+
 ## 1. The organising idea: freeze the seam, then parallelise
 
 Four people cannot build four packages in six days if each is waiting on the
@@ -193,8 +211,10 @@ The table belongs on a slide, and every row has a test behind it.
 | Campus network or testnet fails mid-demo | `--offline` reproduces every verdict from fixtures; plus a recorded backup |
 | Sepolia faucet dry / no test ETH | Get it on Day 3, not Day 5. Local Hardhat is the fallback |
 | A member falls behind | The fakes mean their package can be demonstrated stubbed; the seam already isolates it |
-| ABI drift between packages | One frozen spec file, `specVersion` bump required to change it |
+| ABI drift between packages | One frozen spec file, `specVersion` bump required to change it, and two automated checks that compare against it |
 | 3-minute overrun | Rehearse with a timer from Day 5; cut the problem statement, never the demo |
+| `npm install` fails on the repo drive | esbuild ships a native binary and most auto-mounted NTFS/exFAT partitions are `noexec`. Install the dashboard's dependencies on the home partition and symlink them — documented in the dashboard README. Hardhat is pure JS and unaffected |
+| No wallet on the presentation machine | Leave `VITE_CONTRACT_ADDRESS` empty; the dashboard's in-memory registry enforces the same rules |
 
 ---
 
