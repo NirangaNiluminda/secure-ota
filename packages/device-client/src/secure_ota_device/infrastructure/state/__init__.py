@@ -1,0 +1,1 @@
+"""Device state persistence adapters."""

@@ -1,0 +1,142 @@
+{
+  "contractName": "FirmwareRegistry",
+  "specVersion": "1.0.0",
+  "frozenOn": "2026-09-24",
+  "notes": "Frozen integration seam for SecureOTA. All four packages code against this ABI. Any change requires agreement from every member and a specVersion bump.",
+  "invariants": [
+    "A release version is always >= 1; version 0 is the sentinel for 'no release exists'.",
+    "publishRelease reverts unless version > latestVersion(model) (rollback prevention).",
+    "firmwareHash is the SHA-256 digest of the exact firmware binary bytes.",
+    "locator is an opaque fetch hint (IPFS CID or HTTPS URL); the chain never stores the binary.",
+    "Only an account holding MANUFACTURER_ROLE may publish or revoke.",
+    "Revocation is one-way: a revoked release can never be un-revoked."
+  ],
+  "abi": [
+    {
+      "type": "function",
+      "name": "publishRelease",
+      "stateMutability": "nonpayable",
+      "inputs": [
+        { "name": "model", "type": "string" },
+        { "name": "version", "type": "uint256" },
+        { "name": "firmwareHash", "type": "bytes32" },
+        { "name": "locator", "type": "string" }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "revokeRelease",
+      "stateMutability": "nonpayable",
+      "inputs": [
+        { "name": "model", "type": "string" },
+        { "name": "version", "type": "uint256" }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "latestRelease",
+      "stateMutability": "view",
+      "inputs": [{ "name": "model", "type": "string" }],
+      "outputs": [
+        {
+          "name": "",
+          "type": "tuple",
+          "components": [
+            { "name": "version", "type": "uint256" },
+            { "name": "firmwareHash", "type": "bytes32" },
+            { "name": "locator", "type": "string" },
+            { "name": "publishedAt", "type": "uint256" },
+            { "name": "revoked", "type": "bool" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "releaseAt",
+      "stateMutability": "view",
+      "inputs": [
+        { "name": "model", "type": "string" },
+        { "name": "version", "type": "uint256" }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "tuple",
+          "components": [
+            { "name": "version", "type": "uint256" },
+            { "name": "firmwareHash", "type": "bytes32" },
+            { "name": "locator", "type": "string" },
+            { "name": "publishedAt", "type": "uint256" },
+            { "name": "revoked", "type": "bool" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "latestVersion",
+      "stateMutability": "view",
+      "inputs": [{ "name": "model", "type": "string" }],
+      "outputs": [{ "name": "", "type": "uint256" }]
+    },
+    {
+      "type": "function",
+      "name": "releaseCount",
+      "stateMutability": "view",
+      "inputs": [{ "name": "model", "type": "string" }],
+      "outputs": [{ "name": "", "type": "uint256" }]
+    },
+    {
+      "type": "event",
+      "name": "ReleasePublished",
+      "anonymous": false,
+      "inputs": [
+        { "name": "model", "type": "string", "indexed": true },
+        { "name": "version", "type": "uint256", "indexed": true },
+        { "name": "firmwareHash", "type": "bytes32", "indexed": false },
+        { "name": "locator", "type": "string", "indexed": false }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "ReleaseRevoked",
+      "anonymous": false,
+      "inputs": [
+        { "name": "model", "type": "string", "indexed": true },
+        { "name": "version", "type": "uint256", "indexed": true }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "NonMonotonicVersion",
+      "inputs": [
+        { "name": "provided", "type": "uint256" },
+        { "name": "current", "type": "uint256" }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "UnknownRelease",
+      "inputs": [
+        { "name": "model", "type": "string" },
+        { "name": "version", "type": "uint256" }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "EmptyFirmwareHash",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "AlreadyRevoked",
+      "inputs": [
+        { "name": "model", "type": "string" },
+        { "name": "version", "type": "uint256" }
+      ]
+    }
+  ]
+}
