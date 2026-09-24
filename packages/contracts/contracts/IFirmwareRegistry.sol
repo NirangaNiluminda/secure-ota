@@ -24,6 +24,11 @@ interface IFirmwareRegistry {
         bool revoked;
     }
 
+    /// @dev `model` is an indexed string, so the log topic holds keccak256 of it
+    ///      rather than the text. That makes filtering by a known model cheap,
+    ///      but the name cannot be recovered from the topic. Clients building a
+    ///      release table filter by `keccak256(model)` for models they already
+    ///      know; they do not enumerate models from the log.
     event ReleasePublished(
         string indexed model,
         uint256 indexed version,
