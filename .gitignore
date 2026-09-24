@@ -39,3 +39,7 @@ packages/attack-harness/.serve/
 *.swp
 .idea/
 .vscode/
+
+# Local dev deployment records are ephemeral; shared testnet ones are committed
+packages/contracts/deployments/localhost.json
+packages/contracts/deployments/hardhat.json

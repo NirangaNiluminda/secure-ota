@@ -1,0 +1,26 @@
+{
+  "name": "@secure-ota/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FirmwareRegistry — the on-chain release register SecureOTA devices verify against",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "seed:local": "hardhat run scripts/seed.ts --network localhost",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "seed:sepolia": "hardhat run scripts/seed.ts --network sepolia",
+    "check:abi": "hardhat run scripts/check-abi.ts"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^20.12.7",
+    "hardhat": "^2.22.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
