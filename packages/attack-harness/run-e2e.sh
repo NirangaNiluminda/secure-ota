@@ -27,16 +27,22 @@ cleanup() {
 trap cleanup EXIT
 
 serve_pristine
-"$PYTHON" "$HERE/src/firmware_server.py" --root "$SERVE_ROOT" --port "$SERVER_PORT" \
-  >"$HERE/.serve/server.log" 2>&1 &
-SERVER_PID=$!
 
-for _ in $(seq 1 30); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:$SERVER_PORT/firmware/" 2>/dev/null; then
-    break
-  fi
-  sleep 0.2
-done
+# Reuse a server that is already running — under Docker it is a sibling
+# container sharing the document-root volume, and starting a second one here
+# would serve different bytes than the one the ledger's locators point at.
+if server_is_up; then
+  note "using the firmware server already running at $SERVER_URL"
+else
+  "$PYTHON" "$HERE/src/firmware_server.py" --root "$SERVE_ROOT" --port "$SERVER_PORT" \
+    >"$HERE/.serve/server.log" 2>&1 &
+  SERVER_PID=$!
+
+  for _ in $(seq 1 40); do
+    server_is_up && break
+    sleep 0.25
+  done
+fi
 require_server
 
 banner "SecureOTA end-to-end"

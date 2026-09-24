@@ -13,7 +13,11 @@ REPO_ROOT="$(cd "$HARNESS_DIR/../.." && pwd)"
 # Override PYTHON to point at an interpreter that has web3 installed.
 PYTHON="${PYTHON:-python3}"
 RPC_URL="${RPC_URL:-http://127.0.0.1:8545}"
+# SERVER_HOST is a separate variable so the same scripts work when the firmware
+# server is a sibling container rather than a process on this machine.
+SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
 SERVER_PORT="${SERVER_PORT:-8081}"
+SERVER_URL="http://${SERVER_HOST}:${SERVER_PORT}"
 
 SERVE_ROOT="$HARNESS_DIR/.serve/www"
 STATE="$HARNESS_DIR/.serve/state.json"
@@ -67,10 +71,15 @@ device() {
     --state "$STATE" --slot "$SLOT" "$@"
 }
 
+server_is_up() {
+  curl -fsS -o /dev/null "$SERVER_URL/firmware/" 2>/dev/null
+}
+
 require_server() {
-  if ! curl -fsS -o /dev/null "http://127.0.0.1:$SERVER_PORT/firmware/" 2>/dev/null; then
-    echo "Firmware server is not answering on port $SERVER_PORT." >&2
-    echo "Start it with: ./scenarios/00-start-server.sh" >&2
+  if ! server_is_up; then
+    echo "Firmware server is not answering at $SERVER_URL" >&2
+    echo "Start it with: bash scenarios/00-start-server.sh" >&2
+    echo "(or, under Docker: docker compose up -d firmware)" >&2
     exit 2
   fi
 }
