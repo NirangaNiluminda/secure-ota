@@ -1,0 +1,21 @@
+# Python toolchain for the device client and the attack harness.
+#
+# The device client's core has no third-party dependencies at all; web3 is only
+# needed to read a real chain, and pytest only to run the suite. Both are
+# installed globally here because a container is already an isolated
+# environment — a virtualenv inside it would add a layer for nothing.
+
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir pytest "web3>=6.15,<8"
+
+WORKDIR /workspace
+
+ENV PYTHONPATH=/workspace/packages/device-client/src \
+    PYTHONUNBUFFERED=1
+
+CMD ["bash"]

@@ -1,0 +1,40 @@
+# Node toolchain for the contracts and dashboard packages.
+#
+# Dependencies are installed into the image, and docker-compose mounts named
+# volumes over each node_modules directory at runtime. That keeps them on the
+# container filesystem rather than the bind-mounted host drive — which is the
+# whole point here, because an NTFS mount cannot carry an execute bit and npm
+# scripts run shebang launchers out of node_modules/.bin.
+
+FROM node:20-bookworm-slim
+
+# curl is used by the compose healthcheck to wait for the JSON-RPC endpoint.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# npm's defaults assume a fast link. Hardhat's tree is ~400 packages, and on a
+# slow or lossy connection the install dies with EIDLETIMEOUT part-way through.
+# Longer timeouts, more retries and fewer parallel sockets trade a little speed
+# for an install that actually finishes.
+RUN npm config set fetch-timeout 600000 \
+    && npm config set fetch-retries 5 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm config set maxsockets 5
+
+# Copy only manifests first so a source edit does not invalidate the install
+# layer. `npm ci` installs exactly what the lockfiles pin.
+COPY packages/contracts/package.json packages/contracts/package-lock.json packages/contracts/
+RUN cd packages/contracts && npm ci --no-audit --no-fund
+
+COPY packages/dashboard/package.json packages/dashboard/package-lock.json packages/dashboard/
+RUN cd packages/dashboard && npm ci --no-audit --no-fund
+
+# Compose overlays the real source at /workspace; this is only so the image is
+# usable on its own.
+COPY . /workspace
+
+CMD ["bash"]

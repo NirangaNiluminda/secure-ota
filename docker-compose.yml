@@ -1,0 +1,141 @@
+# SecureOTA — the whole stack in containers.
+#
+# Why this exists: the repository may live on an NTFS/exFAT volume that cannot
+# carry a Unix execute bit, so `npm run node` dies with "hardhat: Permission
+# denied" when npm tries to run node_modules/.bin/hardhat. Inside a container the
+# dependency trees live on named volumes on the container filesystem, where the
+# execute bit works normally. It also gives all four members one identical
+# environment, which is worth having on its own.
+#
+#   docker compose up -d chain firmware dashboard   # start the stack
+#   docker compose run --rm deployer                # deploy + seed the registry
+#   docker compose run --rm device bash run-e2e.sh  # every defence, end to end
+#
+# Ports on the host: 8545 chain · 8081 firmware · 5173 dashboard
+
+name: secure-ota
+
+x-node: &node
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.node
+  image: secure-ota/node:local
+  volumes:
+    - .:/workspace
+    # Named volumes shadow the host's node_modules so the container uses its own.
+    - contracts_modules:/workspace/packages/contracts/node_modules
+    - dashboard_modules:/workspace/packages/dashboard/node_modules
+
+x-python: &python
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.python
+  image: secure-ota/python:local
+  volumes:
+    - .:/workspace
+    # Shared so the attacker container tampers with exactly the bytes the
+    # firmware server is handing out.
+    - serve_data:/workspace/packages/attack-harness/.serve
+
+services:
+  # The local blockchain.
+  chain:
+    <<: *node
+    working_dir: /workspace/packages/contracts
+    command: npx hardhat node --hostname 0.0.0.0
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - -X
+        - POST
+        - -H
+        - "Content-Type: application/json"
+        - --data
+        - '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+        - http://localhost:8545
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # One-shot: deploy FirmwareRegistry and publish the three fixture releases.
+  # Locators point at the firmware service, not at localhost, because the device
+  # container has to be able to resolve them.
+  deployer:
+    <<: *node
+    working_dir: /workspace/packages/contracts
+    environment:
+      # Inside the network the node is a sibling service, not 127.0.0.1.
+      LOCALHOST_RPC_URL: http://chain:8545
+      FIRMWARE_BASE_URL: http://firmware:8081/
+    command: >
+      sh -c "npx hardhat run scripts/deploy.ts --network localhost &&
+             npx hardhat run scripts/seed.ts   --network localhost"
+    depends_on:
+      chain:
+        condition: service_healthy
+    restart: "no"
+
+  # The untrusted firmware server. Populates its document root from the shared
+  # fixtures on boot, then serves whatever is there — including bytes an
+  # attacker has swapped, which is the entire point.
+  firmware:
+    <<: *python
+    working_dir: /workspace/packages/attack-harness
+    command: >
+      sh -c "mkdir -p .serve/www/firmware &&
+             cp /workspace/packages/shared/fixtures/firmware/*.bin .serve/www/firmware/ &&
+             python3 src/firmware_server.py --root .serve/www --port 8081 --host 0.0.0.0"
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8081/firmware/"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  # The manufacturer console.
+  dashboard:
+    <<: *node
+    working_dir: /workspace/packages/dashboard
+    command: npx vite --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_RPC_URL: http://localhost:8545
+      VITE_CHAIN_ID: "31337"
+      VITE_DEVICE_MODEL: RUH-SENSOR-01
+      VITE_FIRMWARE_BASE_URL: http://localhost:8081/firmware/
+
+  # The device, and the attacker. Run on demand rather than started with `up`.
+  device:
+    <<: *python
+    working_dir: /workspace/packages/attack-harness
+    environment:
+      RPC_URL: http://chain:8545
+      SERVER_HOST: firmware
+      SERVER_PORT: "8081"
+      PYTHON: python3
+    depends_on:
+      chain:
+        condition: service_healthy
+      firmware:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  # Every test suite in one command.
+  tests:
+    <<: *python
+    working_dir: /workspace/packages/device-client
+    command: python3 -m pytest
+    profiles: ["tools"]
+
+volumes:
+  contracts_modules:
+  dashboard_modules:
+  serve_data:
