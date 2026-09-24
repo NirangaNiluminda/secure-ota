@@ -1,75 +1,100 @@
 # Manufacturer Dashboard — Member 3
 
-The vendor-side console. This is what the audience watches during the first
-thirty seconds of the demo: a firmware file goes in, a hash appears, a
-transaction is signed, and the release is on-chain.
+The vendor-side console, and the first thirty seconds of the demo: a firmware
+file goes in, its SHA-256 appears, a transaction is signed, and the release is
+on-chain.
 
-## Your deliverable
-
-A single-page app with three screens:
-
-1. **Publish** — drag in a `.bin`, the page computes SHA-256 *in the browser*,
-   shows it, and calls `publishRelease`. Never upload the file to compute the
-   hash; computing it client-side is the point.
-2. **Releases** — a table of every release for a model, read from
-   `ReleasePublished` / `ReleaseRevoked` events, with the revoked ones struck
-   through.
-3. **Revoke** — pick a version, confirm, call `revokeRelease`.
-
-## Setup
+## Running it
 
 ```bash
-npm create vite@latest . -- --template react-ts
-npm i ethers
+npm install
+cp .env.example .env.local     # leave VITE_CONTRACT_ADDRESS empty for demo mode
+npm run dev                    # http://localhost:5173
 ```
 
-## Structure — mirror the device client's layering
+With no contract configured it runs against an in-memory registry seeded with the
+same three releases the other packages use. That is not a toy: it is how the UI
+was built before the contract was deployed, and it is the fallback if the
+presentation machine has no wallet installed. It enforces the same monotonicity
+and one-way revocation rules as the contract, so demo mode cannot teach the
+audience something the real system would not do.
+
+Against a real deployment, set `VITE_CONTRACT_ADDRESS` from
+`packages/contracts/deployments/<network>.json`, plus `VITE_RPC_URL` and
+`VITE_CHAIN_ID`.
+
+```bash
+npm run typecheck        # tsc --noEmit
+npm run build            # typecheck + production bundle
+npm run check:layering   # architecture guard, see below
+```
+
+## ⚠ If the repository lives on a `noexec` mount
+
+`esbuild`, which Vite depends on, ships a native binary that must be executable.
+On a drive mounted `noexec` — which includes most auto-mounted NTFS and exFAT
+partitions — `npm install` fails with `EACCES ... spawnSync .../esbuild`.
+
+Install the dependencies on a partition that allows execution and link them in:
+
+```bash
+mkdir -p ~/.cache/secureota/dashboard-build
+cp package.json ~/.cache/secureota/dashboard-build/
+(cd ~/.cache/secureota/dashboard-build && npm install)
+rm -rf node_modules
+ln -sfn ~/.cache/secureota/dashboard-build/node_modules node_modules
+```
+
+Do not run `npm install` in the package directory afterwards — it replaces the
+symlink. The contracts package is unaffected: Hardhat is pure JavaScript.
+
+## Layout
 
 ```
 src/
-├── domain/              Release, FirmwareVersion, FirmwareHash (plain TS, no ethers)
-├── application/ports/   ReleaseRegistryPort, WalletPort  (interfaces)
-├── infrastructure/      EthersReleaseRegistry, MetaMaskWallet  (implements the ports)
-└── ui/                  components and pages — no ethers imports anywhere here
+├── domain/              FirmwareVersion, FirmwareHash, Release — plain TS
+├── application/
+│   ├── ports/           ReleaseRegistryPort, WalletPort, FirmwareHasherPort
+│   └── useCases/        PublishRelease, RevokeRelease, ListReleases
+├── infrastructure/      EthersReleaseRegistry, BrowserWallet, WebCryptoHasher,
+│                        DemoReleaseRegistry — the only place ethers appears
+├── composition/         container.ts, the only place adapters are constructed
+└── ui/                  components and the App shell
 ```
 
-The rule that matters: **no React component may import `ethers` directly.** A
-component calls a port; the port is implemented in `infrastructure/`. That keeps
-the UI testable and means swapping MetaMask for WalletConnect touches one file.
-It also means your layering argument matches Member 1's, which reads as one
-system rather than two projects stapled together.
+Same layering as the device client, for the same reason: `npm run check:layering`
+fails the build if any file outside `infrastructure/` imports ethers, and if the
+vendored ABI has drifted from `packages/shared`. Architecture that is only
+described in a README rots; this one is checked.
 
-## Hashing in the browser
+## The version encoding
 
-```ts
-const buffer = await file.arrayBuffer();
-const digest = await crypto.subtle.digest("SHA-256", buffer);
-const hex = "0x" + [...new Uint8Array(digest)]
-  .map(b => b.toString(16).padStart(2, "0")).join("");
-```
+The contract stores a monotonic `uint256`. Every package encodes semantic
+versions identically — `major * 10000 + minor * 100 + patch`, so `1.4.0` is
+`10400`. It is defined once in `src/domain/FirmwareVersion.ts` and nowhere else.
 
-Show that hex string prominently before the transaction is sent — the audience
-needs to see the same value land on Etherscan.
+## Hashing happens here, in the browser
 
-## Version encoding
+`WebCryptoHasher` computes the digest with `crypto.subtle` the moment a file is
+chosen. **The file is never uploaded** — only the 32-byte fingerprint is sent,
+and only to the blockchain. Say that out loud during the demo; it is the
+difference between SecureOTA and an ordinary upload-and-trust-the-server
+pipeline.
 
-The contract stores a monotonic `uint256`. Encode semantic versions exactly as
-the other packages do, or the integration breaks:
+## One detail that cost an afternoon elsewhere
 
-```ts
-const toCode = (major: number, minor: number, patch: number) =>
-  major * 10000 + minor * 100 + patch;   // 1.4.0 -> 10400
-```
-
-## Config
-
-Read the contract address from `deployments/<network>.json` that Member 2
-produces. Do not hard-code it, and do not commit any private key or RPC key —
-`.env` is gitignored for a reason.
+`model` is an **indexed string** in the contract's events, so the log topic holds
+`keccak256(model)`, not the text. You cannot recover model names from the log.
+`EthersReleaseRegistry.listReleases` therefore uses the event log only to
+discover *which versions exist*, then reads each one back through `releaseAt` —
+which is also the only way to learn whether a release has since been revoked,
+since a `ReleasePublished` event cannot know that.
 
 ## Demo obligations
 
-- The publish button must show a pending state and then a link to the
-  transaction on Etherscan. That link is the proof the ledger is real.
-- Keep the UI legible from the back of a room: large type, high contrast, no
-  dense tables.
+- The full digest is shown before the transaction is sent. Pause on it.
+- Successful transactions render an Etherscan link. That link is the proof the
+  ledger is real, not a local mock.
+- The release table marks the version **devices accept** — the newest one not
+  withdrawn. Revoking a release visibly moves that marker, which is the payoff
+  of the revocation beat.
