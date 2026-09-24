@@ -12,45 +12,62 @@ A dead-simple HTTP server on `:8081` that serves files from a directory. That
 directory is what you tamper with. It stands in for the vendor CDN or the IPFS
 gateway — infrastructure the project deliberately does not trust.
 
-### 2. Four attack scenarios, each one command
+### 2. Four scenarios, each one command
 
 ```
-scenarios/01-tampered-binary.sh    swap the served .bin for a malicious one
-scenarios/02-rollback.sh           steer the device at an older genuine release
-scenarios/03-revoked-release.sh    offer a release the vendor withdrew
-scenarios/04-happy-path.sh         the control: an honest update succeeds
+scenarios/00-start-server.sh       the untrusted firmware server (foreground)
+scenarios/01-happy-path.sh         the control: an honest update succeeds
+scenarios/02-tampered-binary.sh    swap the served .bin for an implant
+scenarios/03-rollback.sh           steer the device at an older genuine release
+scenarios/04-revoked-release.sh    offer a release the vendor withdrew
 ```
 
-Each script prints what the attacker is doing, runs the device client, and shows
-the verdict. The control case matters as much as the attacks — without it, the
-audience cannot tell a working defence from a device that refuses everything.
+Each script prints what the attacker is doing, runs the device client, and
+**asserts its own expected outcome**, exiting non-zero if the defence did not
+behave. That way the same script serves the live demo and CI — a defence that
+quietly stopped working is caught here rather than on stage.
+
+The control case matters as much as the attacks. Without it, the audience cannot
+tell a working defence from a device that refuses everything.
 
 ### 3. End-to-end integration test
 
-One script that runs the full stack — local Hardhat node, deployed contract,
-seeded releases, firmware server, device client — and asserts the exit codes:
-`0` for the happy path, `1` for each attack. Wire it so a failure is loud.
+`run-e2e.sh` starts the firmware server, runs the control and all three attacks
+against the deployed contract, and fails loudly if any defence misbehaves. This
+is the Stage 3 gate: if it is green, the demo works.
 
 ### 4. The presentation
 
 `GP_XX_SecureOTA.pptx`, three minutes, and the rehearsal that makes it fit.
 
-## Running the device client from a scenario
+## Running it
+
+The device client needs `web3` to talk to a chain, so point `PYTHON` at an
+interpreter that has it. Note that if the repository lives on a drive mounted
+`noexec`, invoke the scripts through `bash` rather than executing them directly.
+
+First, from `packages/contracts`:
 
 ```bash
-export PYTHONPATH=../device-client/src
-python3 -m secure_ota_device.cli.main \
-  --state .serve/state.json --slot .serve/slot \
-  --contract "$CONTRACT" --rpc-url http://127.0.0.1:8545 \
-  update
-echo "exit=$?"      # 1 means the device refused — that is a pass
+npm run node                                 # in its own terminal
+npm run deploy:local && npm run seed:local
 ```
 
-To reset the device between scenarios, write the state file directly:
+Then, from here:
 
 ```bash
-printf '{"model":"RUH-SENSOR-01","installedVersion":10200}' > .serve/state.json
+PYTHON=/path/to/python-with-web3 bash run-e2e.sh      # everything at once
+
+bash scenarios/00-start-server.sh                     # or, for the live demo:
+PYTHON=... bash scenarios/02-tampered-binary.sh       # one beat at a time
 ```
+
+`_common.sh` resolves the contract address from
+`packages/contracts/deployments/localhost.json`, so nothing is hard-coded.
+Override with `CONTRACT=0x...` to point at Sepolia.
+
+Exit codes: `0` means the scenario behaved as expected — including the attacks,
+where the expected behaviour is that the device *refused*.
 
 ## Suggested three-minute running order
 
