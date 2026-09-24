@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# Hardhat
+artifacts/
+cache/
+typechain-types/
+
+# Secrets — never commit keys or RPC URLs
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Device runtime state (generated at demo time)
+packages/device-client/.device-state/
+packages/device-client/firmware-slot/
+packages/attack-harness/.serve/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
