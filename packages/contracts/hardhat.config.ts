@@ -7,6 +7,11 @@ const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL ?? "";
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY ?? "";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY ?? "";
 
+// Overridable so the same `--network localhost` commands work from inside a
+// container, where the node is a sibling service rather than 127.0.0.1.
+const LOCALHOST_RPC_URL =
+  process.env.LOCALHOST_RPC_URL ?? "http://127.0.0.1:8545";
+
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.24",
@@ -18,7 +23,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {},
-    localhost: { url: "http://127.0.0.1:8545" },
+    localhost: { url: LOCALHOST_RPC_URL },
     ...(SEPOLIA_RPC_URL && DEPLOYER_PRIVATE_KEY
       ? {
           sepolia: {
