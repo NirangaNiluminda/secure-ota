@@ -3,6 +3,10 @@
 Three levels, depending on how much you need. Start at level 1 — it needs
 nothing installed and still shows every defence working.
 
+If `npm run` gives you **`sh: 1: hardhat: Permission denied`**, skip to
+[Docker](#docker--the-whole-stack-in-containers) or read
+[why that happens](#why-npm-run-fails-on-an-ntfs-drive) first.
+
 ---
 
 ## Level 1 — offline, zero setup *(30 seconds)*
@@ -167,6 +171,113 @@ because git history keeps it.
 
 ---
 
+## Docker — the whole stack in containers
+
+The most reliable path, and the one that makes all four members' environments
+identical. It also sidesteps the NTFS execute-bit problem entirely, because the
+dependency trees live on named volumes inside the containers.
+
+```bash
+docker compose build                              # first time only
+
+docker compose up -d chain firmware dashboard     # start the stack
+docker compose run --rm deployer                  # deploy + seed the registry
+docker compose run --rm device bash run-e2e.sh    # every defence, end to end
+```
+
+Ports on the host: **8545** chain · **8081** firmware server · **5173** dashboard.
+
+Individual scenarios, for the live demo:
+
+```bash
+docker compose run --rm device bash scenarios/01-happy-path.sh
+docker compose run --rm device bash scenarios/02-tampered-binary.sh
+docker compose run --rm device bash scenarios/03-rollback.sh
+docker compose run --rm device bash scenarios/04-revoked-release.sh
+```
+
+The Python test suite:
+
+```bash
+docker compose run --rm tests
+```
+
+Watch the firmware server's log while attacking — it prints the SHA-256 of
+everything it serves, so you can see the digest change the moment a file is
+tampered with:
+
+```bash
+docker compose logs -f firmware
+```
+
+Tear down with `docker compose down`, or `docker compose down -v` to also drop
+the dependency volumes and start clean.
+
+### How it is wired
+
+| Service | What it is | Notes |
+|---|---|---|
+| `chain` | Hardhat node | healthchecked, so `deployer` waits for it |
+| `deployer` | one-shot deploy + seed | locators point at `http://firmware:8081/`, not localhost, because the device container has to resolve them |
+| `firmware` | the untrusted server | shares its document root with `device` via a volume, so the attacker tampers with exactly the bytes being served |
+| `dashboard` | Vite dev server | set `VITE_CONTRACT_ADDRESS` to leave demo mode |
+| `device` | the device client and the attacker | `profiles: ["tools"]`, so it runs on demand rather than with `up` |
+
+The source tree is bind-mounted read-write, so edits on the host take effect
+immediately and `deployments/localhost.json` is written back where the host can
+read it.
+
+---
+
+## Why `npm run` fails on an NTFS drive
+
+npm scripts invoke `node_modules/.bin/<tool>`, a shebang launcher that needs the
+Unix execute bit. This repository's drive is mounted by the desktop's automounter
+as `fuseblk` with `user_id=0`, and **`chmod +x` on it silently does nothing** —
+NTFS through that mount cannot carry the bit at all. So `npm run node` dies with
+`sh: 1: hardhat: Permission denied`.
+
+Three ways out, in order of preference:
+
+**1. Use Docker** (above). Nothing to configure, and everyone gets the same
+environment.
+
+**2. Invoke the tool through node directly.** Works immediately, no setup:
+
+```bash
+cd packages/contracts
+node node_modules/hardhat/internal/cli/bootstrap.js node
+node node_modules/hardhat/internal/cli/bootstrap.js test
+node node_modules/hardhat/internal/cli/bootstrap.js run scripts/deploy.ts --network localhost
+
+cd packages/dashboard
+node node_modules/typescript/lib/tsc.js --noEmit
+node node_modules/vite/bin/vite.js build
+```
+
+`node` is the executable here, and it merely *reads* the `.js` file, so no
+execute bit is needed on anything in `node_modules`.
+
+**3. Fix the mount.** Permanent, but needs `sudo` and a careful edit. There is
+already an fstab entry for this drive, but it is not the one in effect — the
+desktop automounted the drive first. The entry also specifies `fmask=133`, which
+yields `644` on every file, i.e. no execute bit. Change it to `fmask=022`:
+
+```bash
+sudo cp /etc/fstab /etc/fstab.backup          # always back it up first
+sudo nano /etc/fstab                          # change fmask=133 to fmask=022
+
+sudo umount /media/niranga/Engineering        # close all programs using it first
+sudo mount /media/niranga/Engineering
+findmnt -no OPTIONS --target /media/niranga/Engineering   # confirm
+```
+
+The existing entry has `nofail`, so a mistake will not stop the machine booting.
+Verify with `ls -l packages/contracts/node_modules/.bin/hardhat` — you want to
+see `x` bits. After this, plain `npm run node` works.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -177,4 +288,9 @@ because git history keeps it.
 | `Firmware server is not answering on 8081` | Start `scenarios/00-start-server.sh` |
 | `web3 is not installed` | Use the venv interpreter, or pass `--offline` |
 | `Connect a wallet before publishing` | MetaMask not connected, or use demo mode |
-| Port 8545 already in use | An old Hardhat node: `pkill -f "hardhat.*node"` |
+| Port 8545 already in use | An old Hardhat node: `pkill -f "hardhat.*node"`, or `docker compose down` |
+| `sh: 1: hardhat: Permission denied` | NTFS execute bit — see [above](#why-npm-run-fails-on-an-ntfs-drive) |
+| Docker build: `npm error EIDLETIMEOUT` | Slow link. The Dockerfile already raises npm's timeouts and retries; just run `docker compose build` again — completed layers are cached |
+| Docker build: `failed to resolve source metadata` | Transient registry hiccup. `docker pull node:20-bookworm-slim` then rebuild |
+| Docker: device cannot reach the firmware server | Start it first: `docker compose up -d firmware`. Inside compose the host is `firmware`, not `127.0.0.1` — `SERVER_HOST` handles that |
+| Docker: stale dependencies after a package.json change | `docker compose build --no-cache` and `docker compose down -v` |
